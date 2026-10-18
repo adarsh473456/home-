@@ -1,0 +1,9 @@
+{
+  "domain": "kankun",
+  "name": "Kankun",
+  "categories": ["plugs_switches"],
+  "codeowners": [],
+  "documentation": "https://www.home-assistant.io/integrations/kankun",
+  "iot_class": "local_polling",
+  "quality_scale": "legacy"
+}

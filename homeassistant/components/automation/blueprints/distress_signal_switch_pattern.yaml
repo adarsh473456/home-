@@ -1,0 +1,79 @@
+blueprint:
+  name: Emergency alert from switch pattern
+  description: >-
+    Send a notification after a selected light or switch changes state six times
+    in an alternating on/off pattern. Each change must happen within the configured
+    time after the previous change. This is a manually triggered alert, not an
+    intrusion detection system.
+  domain: automation
+  source_url: https://github.com/home-assistant/core/blob/dev/homeassistant/components/automation/blueprints/distress_signal_switch_pattern.yaml
+  input:
+    monitored_entity:
+      name: Light or switch
+      description: The entity the resident will toggle to send the alert.
+      selector:
+        entity:
+          filter:
+            - domain: light
+            - domain: switch
+    notify_device:
+      name: Phone to notify
+      description: Device needs to run the official Home Assistant app.
+      selector:
+        device:
+          filter:
+            integration: mobile_app
+    max_gap:
+      name: Maximum time between changes
+      description: The pattern is cancelled if the next change takes longer.
+      default: 5
+      selector:
+        number:
+          min: 1
+          max: 30
+          unit_of_measurement: seconds
+
+triggers:
+  trigger: state
+  entity_id: !input monitored_entity
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ trigger.from_state is not none
+         and trigger.to_state is not none
+         and trigger.from_state.state in ['on', 'off']
+         and trigger.to_state.state in ['on', 'off']
+         and trigger.from_state.state != trigger.to_state.state }}
+
+variables:
+  expected_state: "{{ 'off' if trigger.to_state.state == 'on' else 'on' }}"
+
+actions:
+  - repeat:
+      count: 5
+      sequence:
+        - wait_for_trigger:
+            trigger: state
+            entity_id: !input monitored_entity
+          timeout:
+            seconds: !input max_gap
+          continue_on_timeout: false
+        - if:
+            - condition: template
+              value_template: >-
+                {{ wait.trigger.from_state is none
+                   or wait.trigger.to_state is none
+                   or wait.trigger.from_state.state not in ['on', 'off']
+                   or wait.trigger.to_state.state != expected_state }}
+          then:
+            - stop: The switch pattern was interrupted.
+        - variables:
+            expected_state: "{{ 'off' if expected_state == 'on' else 'on' }}"
+  - domain: mobile_app
+    type: notify
+    device_id: !input notify_device
+    title: Possible distress signal
+    message: >-
+      The selected light or switch completed the configured distress pattern.
+      Check in with the resident and follow your emergency plan.
